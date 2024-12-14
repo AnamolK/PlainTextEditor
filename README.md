@@ -20,7 +20,7 @@ PlainTextEditor is a simple text editor built using C# and Windows Forms. It pro
 - **Ctrl + W**: Close File.
 - **Ctrl + '.'**: Change to C++ mode.
 - **Ctrl + ','**: Change to Plain Text mode.
-
+- **Ctrl + P**: Print File.
 ## Technologies Used
 
 - C# (Windows Forms)
