@@ -30,6 +30,8 @@ namespace PlainTextEditor
         private PrintDocument printDocument = new PrintDocument();
         private string printText = string.Empty;
         private PrintPreviewDialog printPreviewDialog = new PrintPreviewDialog();
+        private Process runProcess = null; // to track the currently running process
+        private int promptStartIndex = 0;
 
         // Fields for compilation and running
         private string lastCompiledExecutable = null;
@@ -935,27 +937,41 @@ namespace PlainTextEditor
         /// <param name="e"></param>
         private void PlainTextEditor_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (!string.IsNullOrEmpty(textBoxMain.Text) && textBoxMain.Text != originalFileContent)
-            {
+        if (!string.IsNullOrEmpty(textBoxMain.Text) && textBoxMain.Text != originalFileContent)
+        {
                 var result = MessageBox.Show("Do you want to save changes?", "Unsaved Changes", MessageBoxButtons.YesNoCancel);
 
                 if (result == DialogResult.Yes)
                 {
-                    if (string.IsNullOrEmpty(currentFilePath))
-                    {
+                if (string.IsNullOrEmpty(currentFilePath))
+                {
                         SaveAs();
-                    }
-                    else
-                    {
+                }
+                else
+                {
                         SaveFile();
-                    }
+                }
                 }
                 else if (result == DialogResult.Cancel)
                 {
-                    e.Cancel = true;
+                e.Cancel = true;
+                return;
                 }
-            }
         }
+
+        // Terminate any running process before closing
+        if (runProcess != null && !runProcess.HasExited)
+        {
+                try
+                {
+                runProcess.Kill();
+                runProcess.Dispose();
+                runProcess = null;
+                }
+                catch { /* Ignore if already terminated */ }
+        }
+        }
+
 
         private void shortcutsToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -1069,6 +1085,8 @@ namespace PlainTextEditor
             isCppEditorMode = true;
             textBoxMain.TextChanged += textBoxMain_TextChanged;
             ApplyCppHighlighting(); // Trigger initial highlighting
+            panelOutput.Visible = true;
+
         }
 
         // Disable C++ Editor Mode
@@ -1081,6 +1099,8 @@ namespace PlainTextEditor
             textBoxMain.SelectAll();
             textBoxMain.SelectionColor = defaultTextColor;
             textBoxMain.DeselectAll();
+            panelOutput.Visible = false;
+
         }
 
         /// <summary>
@@ -1094,36 +1114,69 @@ namespace PlainTextEditor
                 return;
         }
 
-        // Define the temporary folder within the application's directory
-        string tempFolder = Path.Combine(Application.StartupPath, "Temp");
+        // Use the system's temporary directory to avoid access issues
+        string tempFolder = Path.GetTempPath();
         string tempFile = Path.Combine(tempFolder, "temp_code.cpp");
         string outputExecutable = Path.Combine(tempFolder, "temp_code.exe");
 
-        // Ensure the directory exists
-        if (!Directory.Exists(tempFolder))
+        // Ensure the temporary directory exists
+        try
         {
+                if (!Directory.Exists(tempFolder))
+                {
                 Directory.CreateDirectory(tempFolder);
+                }
+        }
+        catch (Exception ex)
+        {
+                AppendOutput($"Error creating temp directory: {ex.Message}");
+                return;
         }
 
-        // Save code to a temporary file
-        File.WriteAllText(tempFile, textBoxMain.Text);
+        // Terminate any previously running process to release the executable
+        if (runProcess != null && !runProcess.HasExited)
+        {
+                try
+                {
+                runProcess.Kill();
+                runProcess.Dispose();
+                runProcess = null;
+                AppendOutput("Previous running process terminated.\n");
+                }
+                catch (Exception ex)
+                {
+                AppendOutput($"Error terminating previous process: {ex.Message}\n");
+                return;
+                }
+        }
 
-        // Delete old executable if it exists
+        // Save the current code to the temporary .cpp file
+        try
+        {
+                File.WriteAllText(tempFile, textBoxMain.Text);
+        }
+        catch (Exception ex)
+        {
+                AppendOutput($"Error writing to temp file: {ex.Message}\n");
+                return;
+        }
+
+        // Delete the old executable if it exists
         if (File.Exists(outputExecutable))
         {
                 try
                 {
                 File.Delete(outputExecutable);
-                outputTextBox.AppendText("Old executable cleared.\n");
+                AppendOutput("Old executable cleared.\n");
                 }
                 catch (Exception ex)
                 {
-                outputTextBox.AppendText($"Error deleting old executable: {ex.Message}\n");
+                AppendOutput($"Error deleting old executable: {ex.Message}\n");
                 return;
                 }
         }
 
-        // Prepare compiler process
+        // Prepare the compiler process
         ProcessStartInfo psi = new ProcessStartInfo
         {
                 FileName = "g++",
@@ -1134,46 +1187,66 @@ namespace PlainTextEditor
                 CreateNoWindow = true
         };
 
+        // Clear previous output
         outputTextBox.Clear();
 
         try
         {
-                using (Process compiler = Process.Start(psi))
+                using (Process compiler = new Process())
                 {
-                compiler.WaitForExit();
-                string output = compiler.StandardOutput.ReadToEnd();
-                string errors = compiler.StandardError.ReadToEnd();
+                compiler.StartInfo = psi;
+                compiler.Start();
 
-                if (!string.IsNullOrWhiteSpace(output))
+                // Asynchronously read the standard output and error
+                compiler.BeginOutputReadLine();
+                compiler.BeginErrorReadLine();
+
+                // Handle output data received
+                compiler.OutputDataReceived += (s, args) =>
                 {
-                        outputTextBox.AppendText(output + "\n");
-                }
-                if (!string.IsNullOrWhiteSpace(errors))
+                        if (!string.IsNullOrEmpty(args.Data))
+                        {
+                        Invoke(new Action(() => AppendOutput(args.Data + "\n")));
+                        }
+                };
+
+                // Handle error data received
+                compiler.ErrorDataReceived += (s, args) =>
                 {
-                        outputTextBox.AppendText(errors + "\n");
-                        HighlightErrorLines(errors);
-                }
+                        if (!string.IsNullOrEmpty(args.Data))
+                        {
+                        Invoke(new Action(() =>
+                        {
+                                AppendOutput(args.Data + "\n");
+                                HighlightErrorLines(args.Data);
+                        }));
+                        }
+                };
+
+                compiler.WaitForExit();
 
                 if (compiler.ExitCode == 0)
                 {
-                        outputTextBox.AppendText("Compilation succeeded.\n");
+                        AppendOutput("Compilation succeeded.\n");
                         lastCompiledExecutable = outputExecutable;
                 }
                 else
                 {
-                        outputTextBox.AppendText("Compilation failed.\n");
+                        AppendOutput("Compilation failed.\n");
                 }
                 }
         }
         catch (System.ComponentModel.Win32Exception)
         {
-                MessageBox.Show("g++ compiler not found. Please ensure you have a C++ compiler in your PATH.", "Compiler Not Found");
+                MessageBox.Show("g++ compiler not found. Please ensure you have a C++ compiler installed and added to your system PATH.", "Compiler Not Found");
         }
         catch (Exception ex)
         {
-                outputTextBox.AppendText($"Error during compilation: {ex.Message}\n");
+                AppendOutput($"Error during compilation: {ex.Message}\n");
         }
         }
+
+
 
 
         /// <summary>
@@ -1181,52 +1254,181 @@ namespace PlainTextEditor
         /// </summary>
         private void runCodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (!isCppEditorMode)
-            {
+        if (!isCppEditorMode)
+        {
                 MessageBox.Show("Running code is available only in C/C++ mode.", "Not in C++ Mode");
                 return;
-            }
+        }
 
-            if (string.IsNullOrEmpty(lastCompiledExecutable) || !File.Exists(lastCompiledExecutable))
-            {
+        if (string.IsNullOrEmpty(lastCompiledExecutable) || !File.Exists(lastCompiledExecutable))
+        {
                 MessageBox.Show("No compiled executable found. Please compile first.", "No Executable");
                 return;
-            }
+        }
 
-            outputTextBox.AppendText("Running program...\n");
+        // Ensure no process is already running
+        if (runProcess != null && !runProcess.HasExited)
+        {
+                MessageBox.Show("A program is already running. Please terminate it before running a new one.", "Program Running");
+                return;
+        }
 
-            ProcessStartInfo psi = new ProcessStartInfo
-            {
+        AppendOutput("Running program...\n");
+
+        ProcessStartInfo psi = new ProcessStartInfo
+        {
                 FileName = lastCompiledExecutable,
                 UseShellExecute = false,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
+                RedirectStandardInput = true,
                 CreateNoWindow = true
-            };
+        };
 
-            try
-            {
-                using (Process runProcess = Process.Start(psi))
+        try
+        {
+                runProcess = new Process();
+                runProcess.StartInfo = psi;
+                runProcess.OutputDataReceived += (s, args) =>
                 {
-                    string output = runProcess.StandardOutput.ReadToEnd();
-                    string errors = runProcess.StandardError.ReadToEnd();
-                    runProcess.WaitForExit();
-
-                    if (!string.IsNullOrWhiteSpace(output))
-                    {
-                        outputTextBox.AppendText(output + "\n");
-                    }
-                    if (!string.IsNullOrWhiteSpace(errors))
-                    {
-                        outputTextBox.AppendText(errors + "\n");
-                    }
-                    outputTextBox.AppendText($"Process exited with code {runProcess.ExitCode}\n");
+                if (!string.IsNullOrEmpty(args.Data))
+                {
+                        Invoke(new Action(() => AppendOutput(args.Data + "\n")));
                 }
-            }
-            catch (Exception ex)
-            {
-                outputTextBox.AppendText($"Error during execution: {ex.Message}\n");
-            }
+                };
+                runProcess.ErrorDataReceived += (s, args) =>
+                {
+                if (!string.IsNullOrEmpty(args.Data))
+                {
+                        Invoke(new Action(() => AppendOutput(args.Data + "\n")));
+                }
+                };
+                runProcess.Start();
+                runProcess.BeginOutputReadLine();
+                runProcess.BeginErrorReadLine();
+
+                AppendOutput("Program started. You can type your input below:\n");
+                InsertPrompt();
+        }
+        catch (Exception ex)
+        {
+                AppendOutput($"Error during execution: {ex.Message}\n");
+        }
+        }
+        private void AppendOutput(string text)
+        {
+        if (outputTextBox.InvokeRequired)
+        {
+                outputTextBox.Invoke(new Action<string>(AppendOutput), text);
+        }
+        else
+        {
+                outputTextBox.AppendText(text);
+        }
+        }
+        private void InsertPrompt()
+        {
+        AppendOutput(">> ");
+        promptStartIndex = outputTextBox.TextLength;
+        outputTextBox.SelectionStart = promptStartIndex;
+        outputTextBox.SelectionLength = 0;
+        outputTextBox.Focus();
+        }
+
+
+        private void outputTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+        // Prevent backspace before the prompt
+        if (e.KeyCode == Keys.Back)
+        {
+                if (outputTextBox.SelectionStart <= promptStartIndex)
+                {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                }
+        }
+
+        // Prevent moving the caret before the prompt
+        if (e.KeyCode == Keys.Left || e.KeyCode == Keys.Up)
+        {
+                if (outputTextBox.SelectionStart <= promptStartIndex)
+                {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                }
+        }
+
+        // Handle Enter key to send input
+        if (e.KeyCode == Keys.Enter)
+        {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+
+                // Get the user input
+                string userInput = outputTextBox.Text.Substring(promptStartIndex, outputTextBox.TextLength - promptStartIndex).TrimEnd();
+
+                // Send the input to the process
+                if (runProcess != null && !runProcess.HasExited)
+                {
+                try
+                {
+                        runProcess.StandardInput.WriteLine(userInput);
+                }
+                catch (Exception ex)
+                {
+                        AppendOutput($"\nError sending input: {ex.Message}\n");
+                }
+                }
+
+                // Move to the next line and insert a new prompt
+                AppendOutput("\n");
+                InsertPrompt();
+        }
+
+        // Prevent selecting and modifying previous text
+        if (e.Control && (e.KeyCode == Keys.A || e.KeyCode == Keys.C || e.KeyCode == Keys.V || e.KeyCode == Keys.X))
+        {
+                // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+        }
+        else
+        {
+                // Prevent selecting text before prompt
+                if (outputTextBox.SelectionStart < promptStartIndex)
+                {
+                outputTextBox.SelectionStart = outputTextBox.TextLength;
+                }
+        }
+        }
+
+
+        private void outputTextBox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+        if (runProcess != null && !runProcess.HasExited)
+        {
+                int caretPosition = outputTextBox.SelectionStart;
+                string text = outputTextBox.Text;
+                int lastNewLine = text.LastIndexOf('\n');
+
+                if (caretPosition < text.Length && caretPosition < lastNewLine + 1)
+                {
+                // Prevent editing previous lines
+                e.Handled = true;
+                }
+        }
+        }
+
+        private void inputTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+        if (e.KeyCode == Keys.Enter && runProcess != null && !runProcess.HasExited)
+        {
+                string userInput = inputTextBox.Text;
+                inputTextBox.Clear();
+                // Send user input to the process standard input
+                runProcess.StandardInput.WriteLine(userInput);
+                // Prevent the "ding" sound
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+        }
         }
 
         /// <summary>
@@ -1238,13 +1440,13 @@ namespace PlainTextEditor
         private void HighlightErrorLines(string errors)
         {
             // Attempt to parse lines like: "temp_code.cpp:10:5: error: ..."
-            // We'll highlight line 10 in red background
+            // highlight line 10 in red background
             var lines = errors.Split('\n');
             foreach (var line in lines)
             {
                 // Basic parsing
                 // pattern: something:line:...
-                // We'll search for a pattern like filename.cpp:line:
+                // earch for a pattern like filename.cpp:line:
                 var match = Regex.Match(line, @"^(?<file>[^:]+):(?<line>\d+):");
                 if (match.Success)
                 {
