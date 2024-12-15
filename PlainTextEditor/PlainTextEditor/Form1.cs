@@ -7,6 +7,7 @@ using System.Drawing.Printing;
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace PlainTextEditor
 {
@@ -29,11 +30,10 @@ namespace PlainTextEditor
         private PrintDocument printDocument = new PrintDocument();
         private string printText = string.Empty;
         private PrintPreviewDialog printPreviewDialog = new PrintPreviewDialog();
-        private Panel panelLineNumbers;
 
+        // Fields for compilation and running
+        private string lastCompiledExecutable = null;
 
-
-        // Import user32.dll to get scroll position if needed
         [DllImport("user32.dll")]
         private static extern int GetScrollPos(IntPtr hWnd, int nBar);
 
@@ -61,7 +61,6 @@ namespace PlainTextEditor
 
             // Determine the total number of lines
             int totalLines = textBoxMain.GetLineFromCharIndex(textBoxMain.TextLength) + 1;
-
 
             using (Font lineNumberFont = new Font(textBoxMain.Font.FontFamily, 12))
             {
@@ -91,7 +90,6 @@ namespace PlainTextEditor
             }
         }
 
-
         /// <summary>
         /// Event handler for vertical scrolling of the RichTextBox.
         /// </summary>
@@ -116,7 +114,6 @@ namespace PlainTextEditor
         {
             panelLineNumbers.Invalidate();
         }
-
 
         /// <summary>
         /// Starting the windows form application by initializing everything
@@ -209,18 +206,13 @@ namespace PlainTextEditor
         {
             try
             {
-
                 printPreviewDialog.Document = printDocument;
-
-                // Assign the current text to printText
                 printText = textBoxMain.Text;
-
 
                 printPreviewDialog.Width = 800;
                 printPreviewDialog.Height = 600;
                 printPreviewDialog.Text = "Print Preview - PlainTextEditor";
 
-                // Show the Print Preview Dialog
                 printPreviewDialog.ShowDialog();
             }
             catch (Exception ex)
@@ -228,8 +220,6 @@ namespace PlainTextEditor
                 MessageBox.Show($"Print Preview failed: {ex.Message}", "Print Preview Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
-
 
         private void PrintDocument_PrintPage(object sender, PrintPageEventArgs e)
         {
@@ -279,7 +269,6 @@ namespace PlainTextEditor
                 item.ForeColor = Color.Black;
             }
 
-            // Set background color for white theme (light theme)
             aToolStripMenuItem.BackColor = Color.White;
             themeToolStripMenuItem.BackColor = Color.White;
             lightThemeToolStripMenuItem.BackColor = Color.White;
@@ -294,7 +283,6 @@ namespace PlainTextEditor
             cCToolStripMenuItem.BackColor = Color.White;
             printToolStripMenuItem.BackColor = Color.White;
 
-            // Set foreground color (text color) for menu items
             editToolStripMenuItem.ForeColor = Color.Black;
             aToolStripMenuItem.ForeColor = Color.Black;
             themeToolStripMenuItem.ForeColor = Color.Black;
@@ -310,21 +298,21 @@ namespace PlainTextEditor
             cCToolStripMenuItem.ForeColor = Color.Black;
             printToolStripMenuItem.ForeColor = Color.Black;
 
-            // Set the background and foreground color of line numbers panel
             panelLineNumbers.BackColor = Color.White;
             panelLineNumbers.ForeColor = Color.Black;
 
-            AssignCustomRenderer();
-
-            // Set status strip colors
             statusStrip.BackColor = Color.LightGray;
             statusStrip.ForeColor = Color.Black;
             toolStripStatusLabelWordCount.ForeColor = Color.Black;
             toolStripStatusLabelCharCount.ForeColor = Color.Black;
 
-            // Invalidate the panel to refresh line numbers
+            outputTextBox.BackColor = Color.White;
+            outputTextBox.ForeColor = Color.Black;
+
+            AssignCustomRenderer();
             panelLineNumbers.Invalidate();
         }
+
         private void SetDarkTheme()
         {
             SetTitleBarColor();
@@ -332,7 +320,7 @@ namespace PlainTextEditor
             defaultTextColor = Color.White;
 
             this.BackColor = Color.FromArgb(30, 30, 30);
-            this.ForeColor = Color.White; // Corrected to white
+            this.ForeColor = Color.White;
             textBoxMain.BackColor = Color.FromArgb(30, 30, 30);
             textBoxMain.ForeColor = Color.White;
             textBoxMain.BorderStyle = BorderStyle.None;
@@ -349,7 +337,6 @@ namespace PlainTextEditor
                 item.ForeColor = Color.White;
             }
 
-            // Set background color for dark theme
             aToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
             themeToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
             lightThemeToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
@@ -364,7 +351,6 @@ namespace PlainTextEditor
             cCToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
             printToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
 
-            // Set foreground color (text color) for menu items
             editToolStripMenuItem.ForeColor = Color.White;
             aToolStripMenuItem.ForeColor = Color.White;
             themeToolStripMenuItem.ForeColor = Color.White;
@@ -380,22 +366,20 @@ namespace PlainTextEditor
             cCToolStripMenuItem.ForeColor = Color.White;
             printToolStripMenuItem.ForeColor = Color.White;
 
-            // Set the background and foreground color of line numbers panel
             panelLineNumbers.BackColor = Color.FromArgb(40, 40, 40);
             panelLineNumbers.ForeColor = Color.White;
 
-            AssignCustomRenderer(); // Ensure the renderer matches the theme
-
-            // Set status strip colors
             statusStrip.BackColor = Color.FromArgb(40, 40, 40);
             statusStrip.ForeColor = Color.White;
             toolStripStatusLabelWordCount.ForeColor = Color.White;
             toolStripStatusLabelCharCount.ForeColor = Color.White;
 
-            // Invalidate the panel to refresh line numbers
+            outputTextBox.BackColor = Color.Black;
+            outputTextBox.ForeColor = Color.White;
+
+            AssignCustomRenderer();
             panelLineNumbers.Invalidate();
         }
-
 
         /// <summary>
         /// Function for the strip menu item called "New",
@@ -632,12 +616,11 @@ namespace PlainTextEditor
         }
 
         /// <summary>
-        /// Helper function that checks wether the current theme is dark theme
+        /// Helper function that checks whether the current theme is dark theme
         /// </summary>
         /// <returns></returns>
         private bool IsDarkTheme()
         {
-
             return menuStrip.BackColor == Color.FromArgb(40, 40, 40);
         }
 
@@ -694,7 +677,7 @@ namespace PlainTextEditor
                 var okButton = new Button { Text = "OK", Left = 10, Top = 70, Width = 80 };
                 var cancelButton = new Button { Text = "Cancel", Left = 100, Top = 70, Width = 80 };
 
-                okButton.Click += (s, e) =>
+                okButton.Click += (s, e2) =>
                 {
                     if (int.TryParse(textBox.Text, out int newSize) && newSize > 0)
                     {
@@ -708,7 +691,7 @@ namespace PlainTextEditor
                     }
                 };
 
-                cancelButton.Click += (s, e) =>
+                cancelButton.Click += (s, e2) =>
                 {
                     inputDialog.DialogResult = DialogResult.Cancel;
                     inputDialog.Close();
@@ -747,16 +730,7 @@ namespace PlainTextEditor
         }
 
         /// <summary>
-        /// Function for application shortcuts:
-        /// Ctrl + S - save file,
-        /// Ctrl + N - new file,
-        /// Ctrl + O - open file,
-        /// Ctrl + "+" - increase font size,
-        /// Ctrl + "-" - decrease font size,
-        /// Ctrl + T - change theme dark/light,
-        /// Ctrl + W - close application
-        /// Ctrl + ',' - change to plain text mode
-        /// Ctrl + '.' - change to c++ mode
+        /// Function that handles keyboard shortcuts
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -879,13 +853,13 @@ namespace PlainTextEditor
                 System.Environment.Exit(0);
             }
 
-            // Change to cpp theme
+            // Change to cpp mode
             if (e.Control && e.KeyCode == Keys.OemPeriod)
             {
                 SetCppEditorMode();
             }
 
-            // Change to plain mode theme
+            // Change to plain text mode
             if (e.Control && e.KeyCode == Keys.Oemcomma)
             {
                 SetPlainTextMode();
@@ -938,7 +912,7 @@ namespace PlainTextEditor
         }
 
         /// <summary>
-        /// Helper function for the match of the brackets, it is returning the corrent closing bracket for
+        /// Helper function for the match of the brackets, it is returning the correct closing bracket for
         /// the currently typed bracket
         /// </summary>
         /// <param name="openBracket"></param>
@@ -985,7 +959,7 @@ namespace PlainTextEditor
 
         private void shortcutsToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("Shortcuts:\n- CTRL + N - new file\n- CTRL + S - save file\n- CTRL + O - open file\n- CTRL + P - print file\n- CTRL + W - close file\n- CTRL + T - change theme\n- CTRL + '+' - increase font size\n- CTRL + '-' - decrease font size\n- CTRL + '.' - change to c++ mode\n- CTRL + ',' - change to plain text mode", "Shortcuts");
+            MessageBox.Show("Shortcuts:\n- CTRL + N - new file\n- CTRL + S - save file\n- CTRL + O - open file\n- CTRL + P - print file\n- CTRL + W - close file\n- CTRL + T - change theme\n- CTRL + '+' - increase font size\n- CTRL + '-' - decrease font size\n- CTRL + '.' - change to C++ mode\n- CTRL + ',' - change to plain text mode", "Shortcuts");
         }
 
         private void plainTextToolStripMenuItem_Click(object sender, EventArgs e)
@@ -1046,13 +1020,13 @@ namespace PlainTextEditor
             string[] includeDirectives = { "#include" };
 
             Dictionary<string[], Color> keywordCategories = new Dictionary<string[], Color>
-    {
-        { variableTypeKeyWords, Color.DeepSkyBlue },
-        { controlFlowKeywords, Color.Violet },
-        { accessModifiers, Color.Fuchsia },
-        { cppStandardKeywords, Color.DarkOrange },
-        { includeDirectives, Color.ForestGreen }
-    };
+            {
+                { variableTypeKeyWords, Color.DeepSkyBlue },
+                { controlFlowKeywords, Color.Violet },
+                { accessModifiers, Color.Fuchsia },
+                { cppStandardKeywords, Color.DarkOrange },
+                { includeDirectives, Color.ForestGreen }
+            };
 
             foreach (var category in keywordCategories)
             {
@@ -1107,6 +1081,214 @@ namespace PlainTextEditor
             textBoxMain.SelectAll();
             textBoxMain.SelectionColor = defaultTextColor;
             textBoxMain.DeselectAll();
+        }
+
+        /// <summary>
+        /// Handle compilation logic
+        /// </summary>
+        private void compileToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+        if (!isCppEditorMode)
+        {
+                MessageBox.Show("Compilation is available only in C/C++ mode.", "Not in C++ Mode");
+                return;
+        }
+
+        // Define the temporary folder within the application's directory
+        string tempFolder = Path.Combine(Application.StartupPath, "Temp");
+        string tempFile = Path.Combine(tempFolder, "temp_code.cpp");
+        string outputExecutable = Path.Combine(tempFolder, "temp_code.exe");
+
+        // Ensure the directory exists
+        if (!Directory.Exists(tempFolder))
+        {
+                Directory.CreateDirectory(tempFolder);
+        }
+
+        // Save code to a temporary file
+        File.WriteAllText(tempFile, textBoxMain.Text);
+
+        // Delete old executable if it exists
+        if (File.Exists(outputExecutable))
+        {
+                try
+                {
+                File.Delete(outputExecutable);
+                outputTextBox.AppendText("Old executable cleared.\n");
+                }
+                catch (Exception ex)
+                {
+                outputTextBox.AppendText($"Error deleting old executable: {ex.Message}\n");
+                return;
+                }
+        }
+
+        // Prepare compiler process
+        ProcessStartInfo psi = new ProcessStartInfo
+        {
+                FileName = "g++",
+                Arguments = $"\"{tempFile}\" -o \"{outputExecutable}\"",
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+        };
+
+        outputTextBox.Clear();
+
+        try
+        {
+                using (Process compiler = Process.Start(psi))
+                {
+                compiler.WaitForExit();
+                string output = compiler.StandardOutput.ReadToEnd();
+                string errors = compiler.StandardError.ReadToEnd();
+
+                if (!string.IsNullOrWhiteSpace(output))
+                {
+                        outputTextBox.AppendText(output + "\n");
+                }
+                if (!string.IsNullOrWhiteSpace(errors))
+                {
+                        outputTextBox.AppendText(errors + "\n");
+                        HighlightErrorLines(errors);
+                }
+
+                if (compiler.ExitCode == 0)
+                {
+                        outputTextBox.AppendText("Compilation succeeded.\n");
+                        lastCompiledExecutable = outputExecutable;
+                }
+                else
+                {
+                        outputTextBox.AppendText("Compilation failed.\n");
+                }
+                }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+                MessageBox.Show("g++ compiler not found. Please ensure you have a C++ compiler in your PATH.", "Compiler Not Found");
+        }
+        catch (Exception ex)
+        {
+                outputTextBox.AppendText($"Error during compilation: {ex.Message}\n");
+        }
+        }
+
+
+        /// <summary>
+        /// Run the last compiled executable
+        /// </summary>
+        private void runCodeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!isCppEditorMode)
+            {
+                MessageBox.Show("Running code is available only in C/C++ mode.", "Not in C++ Mode");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(lastCompiledExecutable) || !File.Exists(lastCompiledExecutable))
+            {
+                MessageBox.Show("No compiled executable found. Please compile first.", "No Executable");
+                return;
+            }
+
+            outputTextBox.AppendText("Running program...\n");
+
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = lastCompiledExecutable,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+
+            try
+            {
+                using (Process runProcess = Process.Start(psi))
+                {
+                    string output = runProcess.StandardOutput.ReadToEnd();
+                    string errors = runProcess.StandardError.ReadToEnd();
+                    runProcess.WaitForExit();
+
+                    if (!string.IsNullOrWhiteSpace(output))
+                    {
+                        outputTextBox.AppendText(output + "\n");
+                    }
+                    if (!string.IsNullOrWhiteSpace(errors))
+                    {
+                        outputTextBox.AppendText(errors + "\n");
+                    }
+                    outputTextBox.AppendText($"Process exited with code {runProcess.ExitCode}\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                outputTextBox.AppendText($"Error during execution: {ex.Message}\n");
+            }
+        }
+
+        /// <summary>
+        /// Attempt to highlight error lines in the editor.
+        /// The GCC format: filename:line:col: error message
+        /// We will parse line and highlight it.
+        /// </summary>
+        /// <param name="errors"></param>
+        private void HighlightErrorLines(string errors)
+        {
+            // Attempt to parse lines like: "temp_code.cpp:10:5: error: ..."
+            // We'll highlight line 10 in red background
+            var lines = errors.Split('\n');
+            foreach (var line in lines)
+            {
+                // Basic parsing
+                // pattern: something:line:...
+                // We'll search for a pattern like filename.cpp:line:
+                var match = Regex.Match(line, @"^(?<file>[^:]+):(?<line>\d+):");
+                if (match.Success)
+                {
+                    int lineNumber;
+                    if (int.TryParse(match.Groups["line"].Value, out lineNumber))
+                    {
+                        HighlightLine(lineNumber - 1, Color.LightPink); // Use LightPink for visibility
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Highlight a specific line in the editor by applying a background color.
+        /// </summary>
+        private void HighlightLine(int lineNumber, Color backColor)
+        {
+            int startIndex = textBoxMain.GetFirstCharIndexFromLine(lineNumber);
+            if (startIndex < 0)
+                return;
+
+            int lineLength = 0;
+            if (lineNumber == textBoxMain.Lines.Length - 1)
+            {
+                lineLength = textBoxMain.Text.Length - startIndex;
+            }
+            else
+            {
+                lineLength = textBoxMain.Lines[lineNumber].Length;
+            }
+
+            if (lineLength > 0)
+            {
+                int savedSelectionStart = textBoxMain.SelectionStart;
+                int savedSelectionLength = textBoxMain.SelectionLength;
+                var savedColor = textBoxMain.SelectionBackColor;
+
+                textBoxMain.Select(startIndex, lineLength);
+                textBoxMain.SelectionBackColor = backColor;
+
+                textBoxMain.SelectionStart = savedSelectionStart;
+                textBoxMain.SelectionLength = savedSelectionLength;
+                textBoxMain.SelectionBackColor = savedColor;
+            }
         }
     }
 }
