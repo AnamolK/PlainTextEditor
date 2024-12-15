@@ -284,7 +284,11 @@ namespace PlainTextEditor
             plainTextToolStripMenuItem.BackColor = Color.White;
             cCToolStripMenuItem.BackColor = Color.White;
             printToolStripMenuItem.BackColor = Color.White;
+            runCodeToolStripMenuItem.BackColor = Color.White;
+            compileToolStripMenuItem.BackColor = Color.White;
 
+            compileToolStripMenuItem.ForeColor = Color.Black;
+            runCodeToolStripMenuItem.ForeColor = Color.Black;
             editToolStripMenuItem.ForeColor = Color.Black;
             aToolStripMenuItem.ForeColor = Color.Black;
             themeToolStripMenuItem.ForeColor = Color.Black;
@@ -352,7 +356,11 @@ namespace PlainTextEditor
             plainTextToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
             cCToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
             printToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
+            runCodeToolStripMenuItem.BackColor = Color.FromArgb(40, 40, 40);
+            compileToolStripMenuItem.BackColor= Color.FromArgb(40, 40, 40);
 
+            compileToolStripMenuItem.ForeColor= Color.White;
+            runCodeToolStripMenuItem.ForeColor = Color.White;
             editToolStripMenuItem.ForeColor = Color.White;
             aToolStripMenuItem.ForeColor = Color.White;
             themeToolStripMenuItem.ForeColor = Color.White;
