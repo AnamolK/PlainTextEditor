@@ -31,6 +31,8 @@ namespace PlainTextEditor
         private ToolStripMenuItem runToolStripMenuItem;
         private ToolStripMenuItem compileToolStripMenuItem;
         private ToolStripMenuItem runCodeToolStripMenuItem;
+        private System.Windows.Forms.Panel panelInput;
+        private System.Windows.Forms.TextBox inputTextBox;
 
 
         /// <summary>
@@ -296,15 +298,19 @@ namespace PlainTextEditor
             panelOutput.Dock = DockStyle.Bottom;
             panelOutput.Height = 100;
             panelOutput.Controls.Add(outputTextBox);
+            panelOutput.Visible= false;
             //
             // outputTextBox
             //
             outputTextBox.Dock = DockStyle.Fill;
-            outputTextBox.ReadOnly = true;
+            outputTextBox.ReadOnly = false; // Allow user input
             outputTextBox.BackColor = IsDarkTheme() ? Color.Black : Color.White;
             outputTextBox.ForeColor = IsDarkTheme() ? Color.White : Color.Black;
             outputTextBox.Font = new Font("Consolas", 10);
             outputTextBox.Text = "";
+            outputTextBox.KeyDown += outputTextBox_KeyDown;
+            outputTextBox.KeyPress += outputTextBox_KeyPress;
+
 
             //
             // PlainTextEditor
