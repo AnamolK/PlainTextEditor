@@ -32,6 +32,7 @@ namespace PlainTextEditor
         private PrintPreviewDialog printPreviewDialog = new PrintPreviewDialog();
         private Process runProcess = null; // to track the currently running process
         private int promptStartIndex = 0;
+        private bool isWaitingForInput = false;
 
         // Fields for compilation and running
         private string lastCompiledExecutable = null;
@@ -1256,6 +1257,29 @@ namespace PlainTextEditor
 
 
 
+        private void AppendOutput(string text)
+        {
+        if (outputTextBox.InvokeRequired)
+        {
+                outputTextBox.Invoke(new Action<string>(AppendOutput), text);
+        }
+        else
+        {
+                outputTextBox.AppendText(text);
+
+                // Detect if the appended text contains a prompt ending with ':'
+                if (text.TrimEnd().EndsWith(":"))
+                {
+                promptStartIndex = outputTextBox.TextLength;
+                isWaitingForInput = true;
+                outputTextBox.SelectionStart = promptStartIndex;
+                outputTextBox.SelectionLength = 0;
+                outputTextBox.Focus();
+                }
+        }
+        }
+
+
 
         /// <summary>
         /// Run the last compiled executable
@@ -1281,8 +1305,12 @@ namespace PlainTextEditor
                 return;
         }
 
-        AppendOutput("Running program...\n");
+        // Clear previous output
+        outputTextBox.Clear();
+        promptStartIndex = 0; // Reset promptStartIndex
+        isWaitingForInput = false; // Reset input flag
 
+        // Prepare process start info
         ProcessStartInfo psi = new ProcessStartInfo
         {
                 FileName = lastCompiledExecutable,
@@ -1297,6 +1325,18 @@ namespace PlainTextEditor
         {
                 runProcess = new Process();
                 runProcess.StartInfo = psi;
+
+                // Start the process
+                runProcess.Start();
+
+                // Ensure inputs are flushed immediately
+                runProcess.StandardInput.AutoFlush = true;
+
+                // Asynchronously read the standard output and error
+                runProcess.BeginOutputReadLine();
+                runProcess.BeginErrorReadLine();
+
+                // Handle output data received
                 runProcess.OutputDataReceived += (s, args) =>
                 {
                 if (!string.IsNullOrEmpty(args.Data))
@@ -1304,36 +1344,27 @@ namespace PlainTextEditor
                         Invoke(new Action(() => AppendOutput(args.Data + "\n")));
                 }
                 };
+
+                // Handle error data received
                 runProcess.ErrorDataReceived += (s, args) =>
                 {
                 if (!string.IsNullOrEmpty(args.Data))
                 {
-                        Invoke(new Action(() => AppendOutput(args.Data + "\n")));
+                        Invoke(new Action(() =>
+                        {
+                        AppendOutput(args.Data + "\n");
+                        HighlightErrorLines(args.Data);
+                        }));
                 }
                 };
-                runProcess.Start();
-                runProcess.BeginOutputReadLine();
-                runProcess.BeginErrorReadLine();
-
-                AppendOutput("Program started. You can type your input below:\n");
-                InsertPrompt();
         }
         catch (Exception ex)
         {
                 AppendOutput($"Error during execution: {ex.Message}\n");
         }
         }
-        private void AppendOutput(string text)
-        {
-        if (outputTextBox.InvokeRequired)
-        {
-                outputTextBox.Invoke(new Action<string>(AppendOutput), text);
-        }
-        else
-        {
-                outputTextBox.AppendText(text);
-        }
-        }
+
+
         private void InsertPrompt()
         {
         AppendOutput(">> ");
@@ -1346,28 +1377,8 @@ namespace PlainTextEditor
 
         private void outputTextBox_KeyDown(object sender, KeyEventArgs e)
         {
-        // Prevent backspace before the prompt
-        if (e.KeyCode == Keys.Back)
-        {
-                if (outputTextBox.SelectionStart <= promptStartIndex)
-                {
-                e.SuppressKeyPress = true;
-                e.Handled = true;
-                }
-        }
-
-        // Prevent moving the caret before the prompt
-        if (e.KeyCode == Keys.Left || e.KeyCode == Keys.Up)
-        {
-                if (outputTextBox.SelectionStart <= promptStartIndex)
-                {
-                e.SuppressKeyPress = true;
-                e.Handled = true;
-                }
-        }
-
         // Handle Enter key to send input
-        if (e.KeyCode == Keys.Enter)
+        if (isWaitingForInput && e.KeyCode == Keys.Enter)
         {
                 e.SuppressKeyPress = true;
                 e.Handled = true;
@@ -1388,12 +1399,34 @@ namespace PlainTextEditor
                 }
                 }
 
-                // Move to the next line and insert a new prompt
+                // Reset the waiting flag
+                isWaitingForInput = false;
+
+                // Move to the next line and wait for the next prompt
                 AppendOutput("\n");
-                InsertPrompt();
         }
 
-        // Prevent selecting and modifying previous text
+        // Prevent backspace before the prompt
+        if (e.KeyCode == Keys.Back)
+        {
+                if (outputTextBox.SelectionStart <= promptStartIndex)
+                {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                }
+        }
+
+        // Prevent moving the caret before the prompt
+        if (e.KeyCode == Keys.Left || e.KeyCode == Keys.Up)
+        {
+                if (outputTextBox.SelectionStart <= promptStartIndex)
+                {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                }
+        }
+
+        // Allow certain control operations
         if (e.Control && (e.KeyCode == Keys.A || e.KeyCode == Keys.C || e.KeyCode == Keys.V || e.KeyCode == Keys.X))
         {
                 // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
@@ -1407,6 +1440,7 @@ namespace PlainTextEditor
                 }
         }
         }
+
 
 
         private void outputTextBox_KeyPress(object sender, KeyPressEventArgs e)
